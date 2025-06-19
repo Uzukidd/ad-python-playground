@@ -328,16 +328,16 @@ class point_cloud_dataset_base(torch_data.Dataset):
                 return pred_dict
 
             pred_dict["name"] = np.array(class_names)[pred_labels - 1]
-            pred_dict["score"] = pred_scores
-            pred_dict["boxes_lidar"] = pred_boxes
-            pred_dict["pred_labels"] = pred_labels
+            pred_dict["score"] = pred_scores.copy()
+            pred_dict["boxes_lidar"] = pred_boxes.copy()
+            pred_dict["pred_labels"] = pred_labels.copy()
 
             return pred_dict
 
         annos = []
         for index, box_dict in enumerate(pred_dicts):
             single_pred_dict = generate_single_sample_dict(box_dict)
-            single_pred_dict["frame_id"] = batch_dict["frame_id"][index]
+            single_pred_dict["frame_id"] = batch_dict["frame_id"][index].item()
             if "metadata" in batch_dict:
                 single_pred_dict["metadata"] = batch_dict["metadata"][index]
             annos.append(single_pred_dict)
@@ -497,12 +497,12 @@ class point_cloud_dataset_base(torch_data.Dataset):
         }
 
         if gt is not None:
-            input_dict["gt_boxes"] = gt
+            input_dict["gt_boxes"] = gt.copy()
 
         if points is not None:
             points = points.reshape(-1, 4)
             input_dict["intensity"] = points[:, 3].copy()
-            input_dict["points"] = points
+            input_dict["points"] = points.copy()
 
         data_dict = {}
 
@@ -525,7 +525,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         if self.data_processor_queue.__len__() > 1:
             del input_dict
-
+        # print(self.data_processor_queue.__len__())
         # data_dict["pre_time"] = after_time - before_time
 
         return data_dict

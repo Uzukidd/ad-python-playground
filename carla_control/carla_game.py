@@ -1,4 +1,5 @@
 import carla
+import re
 import time
 import numpy as np
 from threading import Thread
@@ -68,6 +69,15 @@ class carla_client:
         self.lidar_t.init_lidar()
 
     def replay_file(self, recorder_filename):
+        map_name = None
+        replay_info = self.carla_client.show_recorder_file_info(
+            recorder_filename, False
+        )
+        match = re.search(r"Map:\s*(\w+)", replay_info)
+        if match:
+            map_name = match.group(1)
+        print(f"Map: {map_name}")
+        self.carla_client.load_world(map_name, reset_settings=False)
         self.carla_client.replay_file(recorder_filename, 0.0, 0.0, 0, False)
 
     def connect_to_vehicle(self, rolename, noisy_lidar=True):
@@ -165,15 +175,16 @@ class carla_client:
         return lidar_bp
 
     def close_client(self) -> None:
-        self.carla_client.stop_replayer(False)
 
-        settings = self.carla_world.get_settings()
         traffic_manager = self.carla_client.get_trafficmanager(8000)
         traffic_manager.set_synchronous_mode(False)
 
+        settings = self.carla_world.get_settings()
         settings.fixed_delta_seconds = None
         settings.synchronous_mode = False
         settings.no_rendering_mode = not self.rendering
         self.carla_world.apply_settings(settings)
+
+        self.carla_client.stop_replayer(False)
 
         del self.carla_client

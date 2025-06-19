@@ -9,8 +9,14 @@ import numpy as np
 import open3d as o3d
 import torch
 import time
+import pickle as pkl
 
+import copy
 import os
+
+import faulthandler
+faulthandler.enable()
+
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 try:
@@ -59,6 +65,11 @@ def parse_arguments():
         "--rolename",
         default="hero",
         help="rolename of the ego vehicle",
+    )
+    argparser.add_argument(
+        "--cache",
+        action="store_true",
+        help="whether to cache the annotation",
     )
     argparser.add_argument(
         "-v",
@@ -190,7 +201,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 label = label + 1
                 label_gt_boxes = gt_boxes[gt_boxes[:, 7] == label].cuda().float()
 
-                if label_gt_boxes.numel() == 0 :
+                if label_gt_boxes.numel() == 0:
                     continue
 
                 channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
@@ -198,7 +209,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 label_det_boxes = det_boxes[det_labels == label].cuda().float()
                 label_det_scores = det_scores[det_labels == label].cuda().float()
 
-                if label_det_boxes.numel() == 0 :
+                if label_det_boxes.numel() == 0:
                     continue
 
                 # 3d bounding box metric
@@ -209,7 +220,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
 
                 valid_gt = torch.any(gt_iou3d >= 0.7, dim=1)
                 channel_res[class_name]["3d"]["recall"] += valid_gt.sum().item()
-                
+
                 # confidence scores metric
                 correspond_det_idx = gt_iou3d[valid_gt, :].argmax(dim=1)
                 if correspond_det_idx.numel() == 0:
@@ -217,7 +228,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 channel_res[class_name]["3d"]["confidence"] += label_det_scores[
                     correspond_det_idx
                 ].tolist()
-        
+
         for label, class_name in enumerate(class_names):
             channel_res[class_name]["3d"]["confidence"] = np.array(
                 channel_res[class_name]["3d"]["confidence"]
@@ -339,9 +350,10 @@ def main(args):
                             ind_gt_annos += [
                                 {
                                     "frame_id": data_dict["frame_id"],
-                                    "gt_boxes": data_dict.get("gt_boxes", None),
+                                    "gt_boxes": data_dict.get("gt_boxes", None).copy(),
                                 }
                             ]
+                            # import pdb;pdb.set_trace()
                             ind_det_annos += annos
                         else:
                             forward_time = 0.0
@@ -403,6 +415,20 @@ def main(args):
                 visualizers[channel_name].destroy_window()
         client.close_client()
         print("CarLA client closed!")
+
+    if args.cache:
+        import os
+
+        cache_filename = os.path.join(
+            "./evaluation_result/.cache",
+            os.path.splitext(os.path.basename(args.recorder_filename))[0]
+            + ("_noisy" if args.noisy_lidar else "")
+            + ".pkl",
+        )
+        print(f"saving annotation cache to {cache_filename}")
+        # import pdb;pdb.set_trace()
+        with open(cache_filename, "wb") as output_stream:
+            pkl.dump((gt_annos, det_annos), output_stream)
 
     if args.evaluate:
         print("start evaluation")
